@@ -107,7 +107,7 @@ class LayerAutomata(Layer, IStreamListener):
 from twisted.internet import protocol
 from twisted.internet.abstract import FileDescriptor
 #first that handle stream     
-from type import Stream
+from type import Stream, ByteStream
 
 class RawLayerClientFactory(protocol.ClientFactory):
     """
@@ -250,11 +250,12 @@ class RawLayer(protocol.Protocol, LayerAutomata, IStreamSender):
         
     def send(self, message):
         """
-        @summary:  Send Stream on TCP layer
+        @summary:  Send ByteStream on TCP layer
                     write rdpy Stream message to str
                     And send it to transport layer
         @param message: (tuple | Type)
         """
-        s = Stream()
+
+        s = ByteStream()
         s.writeType(message)
         self.transport.write(s.getvalue())

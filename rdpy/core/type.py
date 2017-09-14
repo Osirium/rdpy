@@ -800,7 +800,6 @@ class String(Type, CallableValue):
             encVal = encodeUnicode(self.value)
             log.debug(encVal)
             s.write(encVal)
-            #s.write(encodeUnicode(self.value))
         else:
             s.write(self.value)
     

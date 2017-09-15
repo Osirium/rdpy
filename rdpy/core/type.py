@@ -27,6 +27,7 @@ We are in python!
 import struct
 from copy import deepcopy
 from StringIO import StringIO
+from io import BytesIO
 from rdpy.core.error import InvalidExpectedDataException, InvalidSize, CallPureVirtualFuntion, InvalidValue
 import rdpy.core.log as log
 
@@ -479,7 +480,7 @@ class CompositeType(Type):
         if not self._readLen is None and readLen < self._readLen.value:
             log.debug("Still have correct data in packet %s, read %s bytes as padding"%(self.__class__, self._readLen.value - readLen))
             s.read(self._readLen.value - readLen)
-            
+
     def __write__(self, s):
         """
         @summary:  Write all sub-type handle by __setattr__ function
@@ -492,7 +493,7 @@ class CompositeType(Type):
             except Exception as e:
                 log.error("Error during write %s::%s"%(self.__class__, name))
                 raise e
-            
+
     def __sizeof__(self):
         """
         @summary: Call sizeof on each sub type
@@ -790,15 +791,15 @@ class String(Type, CallableValue):
         @param s: Stream
         """
         toWrite = self.value
-        
+
         if not self._until is None:
             toWrite += self._until
-            
+
         if self._unicode:
             s.write(encodeUnicode(self.value))
         else:
             s.write(self.value)
-    
+
     def __read__(self, s):
         """
         @summary:  Read readLen bytes as string
@@ -829,14 +830,17 @@ class String(Type, CallableValue):
             return 2 * len(self.value) + 2
         else:
             return len(self.value)
-    
+
+
 def encodeUnicode(s):
     """
     @summary: Encode string in unicode
     @param s: str python
-    @return: unicode string
+    @return: utf-8 encoded bytearray
     """
-    return "".join([c + "\x00" for c in s]) + "\x00\x00"
+    enc_str = "".join([c + '\x00' for c in s+'\x00'])
+    return bytearray(enc_str, encoding="utf-8")
+
 
 def decodeUnicode(s):
     """
@@ -851,6 +855,7 @@ def decodeUnicode(s):
             r += s[i]
         i += 1
     return r
+
 
 class Stream(StringIO):
     """
@@ -910,13 +915,32 @@ class Stream(StringIO):
                     or iterate over tuple element
         @param value: (tuple | Type)
         """
-        #write each element of tuple
-        if isinstance(value, tuple) or isinstance(value, list):
+        # write each element of tuple
+        if not isinstance(value, (tuple, list)):
+            value.write(self)
+        else:
             for element in value:
                 self.writeType(element)
-            return
-        value.write(self)
-        
+
+
+class ByteStream(BytesIO):
+    """
+    @summary:  ByteStream used to write all types, inherits BytesIO
+    """
+
+    def writeType(self, value):
+        """
+        @summary:  Call specific write on type object
+                    or iterate over tuple element
+        @param value: (tuple | Type)
+        """
+        if not isinstance(value, (tuple, list)):
+            value.write(self)
+        else:
+            for element in value:
+                self.writeType(element)
+
+
 class ArrayType(Type):
     """
     @summary: Factory af n element

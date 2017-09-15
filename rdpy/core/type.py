@@ -791,18 +791,15 @@ class String(Type, CallableValue):
         @param s: Stream
         """
         toWrite = self.value
-        
+
         if not self._until is None:
             toWrite += self._until
-            
+
         if self._unicode:
-            val = self.value
-            encVal = encodeUnicode(self.value)
-            log.debug(encVal)
-            s.write(encVal)
+            s.write(encodeUnicode(self.value))
         else:
             s.write(self.value)
-    
+
     def __read__(self, s):
         """
         @summary:  Read readLen bytes as string
@@ -918,12 +915,12 @@ class Stream(StringIO):
                     or iterate over tuple element
         @param value: (tuple | Type)
         """
-        #write each element of tuple
-        if isinstance(value, tuple) or isinstance(value, list):
+        # write each element of tuple
+        if not isinstance(value, (tuple, list)):
+            value.write(self)
+        else:
             for element in value:
                 self.writeType(element)
-            return
-        value.write(self)
 
 
 class ByteStream(BytesIO):
@@ -937,11 +934,11 @@ class ByteStream(BytesIO):
                     or iterate over tuple element
         @param value: (tuple | Type)
         """
-        if isinstance(value, tuple) or isinstance(value, list):
+        if not isinstance(value, (tuple, list)):
+            value.write(self)
+        else:
             for element in value:
                 self.writeType(element)
-            return
-        value.write(self)
 
 
 class ArrayType(Type):

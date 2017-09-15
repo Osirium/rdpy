@@ -1,7 +1,11 @@
 from rdpy.protocol.rdp import rdp
 import rdpy.core.log as log
-from threading import Event
+from twisted.internet import defer
 import socket
+
+
+def raiseTimeout(failure):
+    raise RuntimeError("Unable to connect to server")
 
 
 class RDPTestClient(rdp.RDPClientObserver):
@@ -12,14 +16,14 @@ class RDPTestClient(rdp.RDPClientObserver):
 
     def __init__(self, controller,
                  width, height,
-                 startedEvent, stoppedEvent):
+                 startedDefer):
         rdp.RDPClientObserver.__init__(self, controller)
         controller.setScreen(width, height)
 
         self.hasInitialised = False
         self.hasSession = False
-        self._startedEvent = startedEvent
-        self._stoppedEvent = stoppedEvent
+        self._startedDefer = startedDefer
+        self._startedDefer.addErrback(raiseTimeout)
 
     def onReady(self):
         """
@@ -32,7 +36,11 @@ class RDPTestClient(rdp.RDPClientObserver):
         @summary: Windows Session Reported Ready
         """
         self.hasSession = True
-        self._startedEvent.set()
+        try:
+            self._startedDefer.callback(self)
+        # onSessionReady is called twice
+        except defer.AlreadyCalledError:
+            pass
 
     def onClose(self):
         """
@@ -41,7 +49,8 @@ class RDPTestClient(rdp.RDPClientObserver):
         """
         self.hasSession = False
         self.hasInitialised = False
-        self._stoppedEvent.set()
+
+        self._stoppedDefer.callback(self)
 
     def onUpdate(self, destLeft, destTop, destRight, destBottom, width, height, bitsPerPixel, isCompress, data):
         """
@@ -60,6 +69,7 @@ class RDPTestClient(rdp.RDPClientObserver):
         """
         @summary close this connection
         """
+        log.info("Stopping client")
         self._controller.close()
 
 
@@ -68,14 +78,13 @@ class RDPTestClientFactory(rdp.ClientFactory):
     @summary: Builds connection to an RDP Server.
     """
 
-    def __init__(self, username, password, startedEvent):
+    def __init__(self, username, password):
         self._username = username
         self._passwod = password
 
         self.stopped = False
         self.reason = None
-        self._startedEvent = startedEvent
-        self._stoppedEvent = Event()
+        self.startDeferred = defer.Deferred()
 
     def buildObserver(self, controller, addr):
         """
@@ -87,7 +96,7 @@ class RDPTestClientFactory(rdp.ClientFactory):
         self._client = RDPTestClient(
             controller,
             1024, 768,
-            self._startedEvent, self._stoppedEvent
+            self.startDeferred
         )
         controller.setUsername(self._username)
         controller.setPassword(self._passwod)
@@ -97,28 +106,6 @@ class RDPTestClientFactory(rdp.ClientFactory):
 
         controller.setSecurityLevel(rdp.SecurityLevel.RDP_LEVEL_NLA)
         return self._client
-
-    def clientConnectionLost(self, connector, reason):
-        """
-        @summary: Connection Lost event, will set both events
-        @param connector: twisted connector use for rdp connection
-        @param reason: FailureInstance explaining why the connection is lost
-        """
-        log.info("Lost connection : %s" % reason.msg)
-
-        self.stopped = True
-        self.reason = reason
-        self._stoppedEvent.set()
-        self._startedEvent.set()
-
-    def clientConnectionFailed(self, connector, reason):
-        """
-        @summary: Connection failed event
-        @param connector: twisted connector use for rdp connection (use
-        reconnect to restart connection)
-        @param reason: str use to advertise reason of lost connection
-        """
-        log.info("Connection failed : %s" % reason)
 
     @property
     def loggedIn(self):
@@ -132,6 +119,4 @@ class RDPTestClientFactory(rdp.ClientFactory):
         @summary: Calls to stop the client and waits for the stopped event.
         @raises RuntimeError: If the client is not closed in 5s
         """
-        self._client.close()
-        if self._stoppedEvent.wait(5.0):
-            raise RuntimeError("Could not close connection")
+        return self._client.close()

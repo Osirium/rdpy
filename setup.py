@@ -24,6 +24,7 @@ setup(name='rdpy',
 			'rdpy.protocol.rdp.nla',
 			'rdpy.protocol.rdp.t125',
 			'rdpy.protocol.rfb',
+			'rdpy.testlib',
 			'rdpy.ui'
 		],
 	ext_modules=[Extension('rle', ['ext/rle.c'])],
